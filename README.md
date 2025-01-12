@@ -9,6 +9,12 @@ Download an entire Elastic cluster with one command.
 ## fakedns
 A very simple DNS server that takes a csv rule file and answers queries based on it.
 
+## gopherchain
+A proxychain implementation in go, using tun2socks and network namespaces.
+
+## grizz
+An IPv4 Lookup tool that is meant to be super fast and efficient.
+
 ## identme
 tiniest implementation of ident.me
 

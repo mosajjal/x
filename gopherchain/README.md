@@ -22,7 +22,7 @@ An alternative to proxychains using Linux Network Namespaces and tun2socks
 go install github.com/mosajjal/go-exp/gopherchain@latest
 ```
 
-### Basic usage:
+### Basic usage
 
 ```bash
 sudo ./gopherchain -proxy socks5://proxy.example.com:1080
@@ -35,6 +35,13 @@ sudo nsenter --net=/run/netns/gopherchain curl ipinfo.io
 > if you get a DNS error, you might need to set your host DNS server to an IP other than localhost or unreachable networks
 > or use the -magicdns flag 
 
+### Use with MagicDNS
+```bash
+sudo ./gopherchain -proxy socks5://proxy.example.com:1080 -magicdns https://dns.adguard.com
+
+# Run any command under the namsepace
+sudo nsenter --net=/run/netns/gopherchain curl ipinfo.io
+```
 
 ## Configuration
 

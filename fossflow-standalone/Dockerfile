@@ -12,7 +12,7 @@ WORKDIR /src
 COPY . .
 COPY --from=frontend /app/build ./fossflow
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/fossflow-standalone .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /out/fossflow-standalone .
 
 # Stage 3: Final image
 FROM scratch

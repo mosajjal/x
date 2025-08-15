@@ -10,8 +10,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/li-jin-gou/http2curl"
 	log "github.com/sirupsen/logrus"
-	"moul.io/http2curl/v2"
 )
 
 type headerFlags []string
@@ -102,14 +102,14 @@ func main() {
 	handlerProxy := func(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			command, _ := http2curl.GetCurlCommand(r)
-			fmt.Println(command.String())
+			fmt.Println(command)
 			r.Host = remote.Host
 			p.ServeHTTP(w, r)
 		}
 	}
 	handlerEmpty := func(w http.ResponseWriter, r *http.Request) {
 		command, _ := http2curl.GetCurlCommand(r)
-		fmt.Println(command.String())
+		fmt.Println(command)
 		// write the headers
 		for _, header := range strings.Split(headerFlag.String(), "\n") {
 			// split the header into key and value

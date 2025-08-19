@@ -25,6 +25,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	result, err := readPcapTimestamps(*inputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// get the timestamps
+	// firstTimestamp := result.FirstTimestamp
+	latestTimestamp := result.LastTimestamp
+
 	// Open the input file
 	handle, err := pcap.OpenOffline(*inputFile)
 	if err != nil {
@@ -33,19 +43,11 @@ func main() {
 	}
 	defer handle.Close()
 
-	// Find the latest timestamp in the pcap file
-	var latestTimestamp time.Time
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	for packet := range packetSource.Packets() {
-		if packet.Metadata().Timestamp.After(latestTimestamp) {
-			latestTimestamp = packet.Metadata().Timestamp
-		}
-	}
-
 	// Calculate the time shift
 	var timeShift time.Duration
 	if *timeShiftStr == "now" {
-		timeShift = time.Now().Sub(latestTimestamp)
+		// timeShift = time.Now().Sub(latestTimestamp)
+		timeShift = time.Since(latestTimestamp)
 	} else {
 		timeShift, err = time.ParseDuration(*timeShiftStr)
 		if err != nil {
@@ -78,7 +80,7 @@ func main() {
 	defer handle.Close()
 
 	// Iterate through the packets again, adjust the timestamp, and write to the new file
-	packetSource = gopacket.NewPacketSource(handle, handle.LinkType())
+	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
 		newTime := packet.Metadata().Timestamp.Add(timeShift)
 		ci := packet.Metadata().CaptureInfo

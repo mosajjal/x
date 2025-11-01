@@ -1,6 +1,6 @@
 module github.com/mosajjal/go-exp/pebble-cli
 
-go 1.22
+go 1.25
 
 require (
 	github.com/cockroachdb/pebble v1.1.0

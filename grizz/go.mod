@@ -1,10 +1,11 @@
 module github.com/mosajjal/x/grizz
 
-go 1.23.4
+go 1.24.4
 
 require (
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/evanphx/wildcat v0.0.0-20141114174135-e7012f664567
+	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/hashicorp/hcl/v2 v2.23.0
 	github.com/panjf2000/gnet/v2 v2.7.1
 	github.com/phuslu/log v1.0.113
@@ -16,7 +17,6 @@ require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/apparentlymart/go-textseg/v13 v13.0.0 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
-	github.com/gofiber/fiber/v2 v2.52.6 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect

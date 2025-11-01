@@ -12,7 +12,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/elastic/go-elasticsearch/v8/esutil"
-	log "github.com/sirupsen/logrus"
+	slog "log/slog"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +60,7 @@ func (s elastic) Send(cmd *cobra.Command, args []string) {
 
 	client, err := elasticsearch.NewClient(cfg)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("operation failed", slog.String("error", err.Error()))
 	}
 
 	// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -74,7 +74,7 @@ func (s elastic) Send(cmd *cobra.Command, args []string) {
 	}.Do(ctx, client)
 
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("operation failed", slog.String("error", err.Error()))
 	}
 
 	if exists.IsError() {
@@ -90,13 +90,13 @@ func (s elastic) Send(cmd *cobra.Command, args []string) {
 
 		// createIndex, err := client.Indices.Create(s.Index).Do()
 		if err != nil {
-			log.Fatal(err)
+			logger.Error("operation failed", slog.String("error", err.Error()))
 		} else {
-			log.Infof("Created Index %v", s.Index)
+			logger.Info("Created Index %v", s.Index)
 		}
 
 		if createIndex.IsError() {
-			log.Fatalln("Could not create the Elastic index.. Exiting")
+			logger.Error("Could not create the Elastic index.. Exiting")
 		}
 
 	}
@@ -109,7 +109,7 @@ func (s elastic) Send(cmd *cobra.Command, args []string) {
 		FlushInterval: 4 * time.Second, // The periodic flush interval
 	})
 	if err != nil {
-		log.Fatalf("Error creating the indexer: %s", err)
+		logger.Error("Error creating the indexer: %s", slog.String("error", err.Error()))
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -138,9 +138,9 @@ func (s elastic) Send(cmd *cobra.Command, args []string) {
 				// OnFailure is called for each failed operation
 				OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {
 					if err != nil {
-						log.Printf("ERROR: %s", err)
+						logger.Info("ERROR: %s", err)
 					} else {
-						log.Printf("ERROR: %s: %s", res.Error.Type, res.Error.Reason)
+						logger.Info("ERROR: %s: %s", res.Error.Type, res.Error.Reason)
 					}
 				},
 			},
@@ -148,12 +148,12 @@ func (s elastic) Send(cmd *cobra.Command, args []string) {
 
 		cnt++
 		if cnt%1000 == 0 {
-			log.Infoln(cnt)
+			logger.Info("processed", slog.Int("count", cnt))
 		}
 
 	}
 	if err := bi.Close(context.Background()); err != nil {
-		log.Fatalf("Unexpected error: %s", err)
+		logger.Error("Unexpected error: %s", slog.String("error", err.Error()))
 	}
 
 	time.Sleep(5 * time.Second)

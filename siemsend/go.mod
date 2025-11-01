@@ -1,12 +1,11 @@
 module github.com/mosajjal/go-exp/siemsend
 
-go 1.22
+go 1.25
 
 require (
 	github.com/elastic/go-elasticsearch/v8 v8.14.0
 	github.com/mosajjal/Go-Splunk-HTTP/splunk/v2 v2.0.7
 	github.com/opensearch-project/opensearch-go v1.1.0
-	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
 )
 

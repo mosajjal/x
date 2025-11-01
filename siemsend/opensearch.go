@@ -14,7 +14,7 @@ import (
 	"github.com/opensearch-project/opensearch-go"
 	"github.com/opensearch-project/opensearch-go/opensearchapi"
 
-	log "github.com/sirupsen/logrus"
+	slog "log/slog"
 	"github.com/spf13/cobra"
 )
 
@@ -63,7 +63,7 @@ func (s Opensearch) Send(cmd *cobra.Command, args []string) {
 	})
 
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("operation failed", slog.String("error", err.Error()))
 	}
 
 	// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -86,10 +86,10 @@ func (s Opensearch) Send(cmd *cobra.Command, args []string) {
 		Body:  settings,
 	}.Do(ctx, client)
 	if err != nil {
-		log.Warn(err)
+		logger.Warn("warning occurred", slog.String("error", err.Error()))
 	}
 	if res.StatusCode != 201 {
-		log.Warnf("Index creation failed")
+		logger.Warn("Index creation failed")
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	buf := make([]byte, 0, 640*1024)
@@ -106,11 +106,11 @@ func (s Opensearch) Send(cmd *cobra.Command, args []string) {
 			Timeout:    2 * time.Second, //TODO: make it configurable
 		}.Do(ctx, client)
 		if err != nil {
-			log.Warn(err)
+			logger.Warn("warning occurred", slog.String("error", err.Error()))
 		}
 		if res.StatusCode != 201 {
-			log.Warnf("insert failed with status code %d", res.StatusCode)
-			log.Infof("the server response: %s", res.String())
+			logger.Warn("insert failed with status code %d", res.StatusCode)
+			logger.Info("the server response: %s", res.String())
 		}
 		// _, err := client.Index().
 		// 	Index(s.Index).
@@ -120,10 +120,10 @@ func (s Opensearch) Send(cmd *cobra.Command, args []string) {
 
 		if cnt%int(s.BatchSize) == 0 {
 			// client.Flush().Index(s.Index).Do(ctx)
-			log.Infoln(cnt)
+			logger.Info("processed", slog.Int("count", cnt))
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Println(err)
+		logger.Error("scanner error", slog.String("error", err.Error()))
 	}
 }

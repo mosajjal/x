@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -11,8 +12,15 @@ import (
 	"strings"
 
 	"github.com/li-jin-gou/http2curl"
-	log "github.com/sirupsen/logrus"
 )
+
+var logger *slog.Logger
+
+func init() {
+	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+}
 
 type headerFlags []string
 
@@ -69,17 +77,15 @@ func main() {
 	flag.Var(&headerFlag, "header", "headers to add to the response. Example: -header 'X-My-Header: my-value'")
 
 	flag.Parse()
-	log.SetFormatter(&log.JSONFormatter{})
-	log.SetLevel(log.DebugLevel)
 
 	if (*tlsCert == "" || *tlsKey == "") && *mode == "tls" {
 		cert, key, err := GenerateSelfSignedCertKey(*address, nil, nil)
 		if err != nil {
-			log.Fatal("fatal Error: ", err)
+			logger.Error("fatal Error: ", err)
 		}
 		certFile, err := os.CreateTemp(os.TempDir(), "spitcurl.pem")
 		if err != nil {
-			log.Fatal("fatal Error: ", err)
+			logger.Error("fatal Error: ", err)
 		}
 		defer os.Remove(certFile.Name())
 		certFile.Write(cert)
@@ -87,7 +93,7 @@ func main() {
 
 		keyFile, err := os.CreateTemp(os.TempDir(), "spitcurl.key")
 		if err != nil {
-			log.Fatal("fatal Error: ", err)
+			logger.Error("fatal Error: ", err)
 		}
 		defer os.Remove(keyFile.Name())
 		keyFile.Write(key)
@@ -151,14 +157,16 @@ func main() {
 
 	switch *mode {
 	case "http":
-		log.Debugf("starting HTTP server on %v:%d", *address, *port)
-		log.Fatal(
-			http.ListenAndServe(fmt.Sprintf("%v:%v", *address, *port), nil),
-		)
+		logger.Info("starting HTTP server", slog.String("address", *address), slog.Uint64("port", uint64(*port)))
+		if err := http.ListenAndServe(fmt.Sprintf("%v:%v", *address, *port), nil); err != nil {
+			logger.Error("HTTP server failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
 	case "tls":
-		log.Debugf("starting HTTPS server on %v:%d", *address, *port)
-		log.Fatal(
-			http.ListenAndServeTLS(fmt.Sprintf("%v:%v", *address, *port), *tlsCert, *tlsKey, nil),
-		)
+		logger.Info("starting HTTPS server", slog.String("address", *address), slog.Uint64("port", uint64(*port)))
+		if err := http.ListenAndServeTLS(fmt.Sprintf("%v:%v", *address, *port), *tlsCert, *tlsKey, nil); err != nil {
+			logger.Error("HTTPS server failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
 	}
 }

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	slog "log/slog"
 	"github.com/spf13/cobra"
 )
 
@@ -98,7 +98,7 @@ func (s Sentinel) sendBatch(batch string, totalSize uint) {
 	signature, err := s.buildSignature(signatureElemets)
 	if err != nil {
 		PrintBatch(batch)
-		log.Error(err)
+		logger.Error("operation failed", slog.String("error", err.Error()))
 		return
 	}
 	// build request
@@ -113,7 +113,7 @@ func (s Sentinel) sendBatch(batch string, totalSize uint) {
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer([]byte(batch)))
 	if err != nil {
 		PrintBatch(batch)
-		log.Error(err)
+		logger.Error("operation failed", slog.String("error", err.Error()))
 		return
 	}
 	var res *http.Response
@@ -125,14 +125,14 @@ func (s Sentinel) sendBatch(batch string, totalSize uint) {
 		proxyURL, err := url.Parse(s.Proxy)
 		if err != nil {
 			PrintBatch(batch)
-			log.Error(err)
+			logger.Error("operation failed", slog.String("error", err.Error()))
 			return
 		}
 		client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 		res, err = client.Do(req)
 		if err != nil {
 			PrintBatch(batch)
-			log.Error(err)
+			logger.Error("operation failed", slog.String("error", err.Error()))
 			return
 		}
 	} else {
@@ -141,14 +141,14 @@ func (s Sentinel) sendBatch(batch string, totalSize uint) {
 		res, err = http.DefaultClient.Do(req)
 		if err != nil {
 			PrintBatch(batch)
-			log.Error(err)
+			logger.Error("operation failed", slog.String("error", err.Error()))
 			return
 		}
 	}
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		log.Infof("batch sent, with code %d", res.StatusCode)
+		logger.Info("batch sent, with code %d", res.StatusCode)
 	} else {
-		log.Errorf("batch not sent, with code %d", res.StatusCode)
+		logger.Error("batch not sent, with code %d", res.StatusCode)
 		PrintBatch(batch)
 	}
 

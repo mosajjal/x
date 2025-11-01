@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/mosajjal/Go-Splunk-HTTP/splunk/v2"
@@ -71,11 +70,11 @@ func (c splunkConfig) connectSplunkRetry(splunkEndpoint string) {
 		// check to see if the connection exists
 		if conn, ok := c.connections[splunkEndpoint]; ok {
 			if conn.Unhealthy != 0 {
-				log.Warnf("Connection is unhealthy")
+				logger.Warn("Connection is unhealthy")
 				c.connections[splunkEndpoint] = c.connectSplunk(splunkEndpoint)
 			}
 		} else {
-			log.Warnf("new splunk endpoint %s", splunkEndpoint)
+			logger.Warn("new splunk endpoint %s", splunkEndpoint)
 			c.connections[splunkEndpoint] = c.connectSplunk(splunkEndpoint)
 		}
 	}
@@ -113,13 +112,13 @@ func (c splunkConfig) connectSplunk(splunkEndpoint string) splunkConnection {
 		unhealthy++
 	}
 	myConn := splunkConnection{Client: client, Unhealthy: unhealthy, Err: err}
-	log.Warnf("new splunk connection")
+	logger.Warn("new splunk connection")
 	return myConn
 }
 
 func (c splunkConfig) Output() {
 
-	log.Infof("Connecting to Splunk endpoints")
+	logger.Info("Connecting to Splunk endpoints")
 	c.connectMultiSplunkRetry()
 
 	rand.Seed(time.Now().Unix())

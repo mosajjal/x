@@ -1,134 +1,293 @@
+// Package main provides elasticdump, a tool to download entire Elasticsearch clusters
+// with configurable filtering options for indices based on document count, size, and regex patterns.
 package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/tidwall/gjson"
 )
 
-var targetIP = flag.String("targetIP", "", "Target IP Address")
-var targetPort = flag.Uint("targetPort", 9200, "Target port")
-var minDocCount = flag.Uint("minDocCount", 100, "Minimum number of Documents for each index")
-var minIndexSizeKB = flag.Uint("minIndexSizeKB", 1024, "Minimum size of index for dump")
-var indexRegex = flag.String("indexRegex", ".*", "Only download indices matching regex")
+// Config holds the configuration for the elasticdump operation.
+type Config struct {
+	TargetIP       string
+	TargetPort     uint
+	MinDocCount    uint
+	MinIndexSizeKB uint
+	IndexRegex     *regexp.Regexp
+}
 
-func checkFlags() {
+var (
+	logger *slog.Logger
+)
+
+func init() {
+	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+}
+
+// parseFlags parses and validates command-line flags.
+func parseFlags() (*Config, error) {
+	targetIP := flag.String("targetIP", "", "Target Elasticsearch IP Address (required)")
+	targetPort := flag.Uint("targetPort", 9200, "Target Elasticsearch port")
+	minDocCount := flag.Uint("minDocCount", 100, "Minimum number of documents for each index")
+	minIndexSizeKB := flag.Uint("minIndexSizeKB", 1024, "Minimum size of index for dump (in KB)")
+	indexRegex := flag.String("indexRegex", ".*", "Only download indices matching this regex pattern")
+
 	flag.Parse()
+
 	if *targetPort > 65535 {
-		log.Fatal("-targetPort must be between 1 and 65535")
+		return nil, fmt.Errorf("targetPort must be between 1 and 65535, got %d", *targetPort)
 	}
 
 	if *targetIP == "" {
-		log.Fatal("-targetIP is required")
+		return nil, fmt.Errorf("targetIP is required")
 	}
+
+	re, err := regexp.Compile(*indexRegex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %w", err)
+	}
+
+	return &Config{
+		TargetIP:       *targetIP,
+		TargetPort:     *targetPort,
+		MinDocCount:    *minDocCount,
+		MinIndexSizeKB: *minIndexSizeKB,
+		IndexRegex:     re,
+	}, nil
 }
 
-func check(e error) {
-	if e != nil {
-		log.Panic(e)
-		// panic(e)
+// getNextScroll fetches the next batch of documents using scroll API.
+func getNextScroll(ctx context.Context, client *http.Client, ip string, port uint, scrollID string, f *os.File) error {
+	postData := []byte(fmt.Sprintf(`{"scroll_id": "%s", "scroll": "10m"}`, scrollID))
+	
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, 
+		fmt.Sprintf("http://%s:%d/_search/scroll", ip, port), 
+		bytes.NewBuffer(postData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
 	}
-}
+	req.Header.Set("Content-Type", "application/json")
 
-func getNextScroll(ip string, port uint, scroll string, f *os.File) int {
-	postData := []byte(fmt.Sprintf(`{"scroll_id": "%v", "scroll": "10m"}`, scroll))
-	resp, err := http.Post(fmt.Sprintf("http://%s:%d/_search/scroll", ip, port), "application/json", bytes.NewBuffer(postData))
-	check(err)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute scroll request: %w", err)
+	}
 	defer resp.Body.Close()
-	resBytes, _ := ioutil.ReadAll(resp.Body)
-	Hits := gjson.GetBytes(resBytes, "hits.hits")
-	if Hits.Raw == "" || Hits.Raw == "[]" {
-		return 0
+
+	resBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
-	f.Write([]byte(Hits.Raw))
+
+	hits := gjson.GetBytes(resBytes, "hits.hits")
+	if hits.Raw == "" || hits.Raw == "[]" {
+		return nil
+	}
+
+	if _, err := f.Write([]byte(hits.Raw)); err != nil {
+		return fmt.Errorf("failed to write hits to file: %w", err)
+	}
+
 	nextScroll := gjson.GetBytes(resBytes, "_scroll_id")
 	if nextScroll.Exists() {
-		getNextScroll(ip, port, nextScroll.String(), f)
+		return getNextScroll(ctx, client, ip, port, nextScroll.String(), f)
 	}
-	return 0
+
+	return nil
 }
 
-func indexToJSON(ip string, port uint, index string, done chan<- bool) (okay bool) {
+// dumpIndexToJSON exports a single Elasticsearch index to a JSON file.
+func dumpIndexToJSON(ctx context.Context, client *http.Client, cfg *Config, index string, done chan<- error) {
 	defer func() {
-		done <- okay
+		if r := recover(); r != nil {
+			done <- fmt.Errorf("panic in dumpIndexToJSON: %v", r)
+		}
 	}()
+
+	log := logger.With(
+		slog.String("index", index),
+		slog.String("target", cfg.TargetIP),
+	)
+
 	postData := []byte(`{"size": 1000}`)
-	resp, err := http.Post(fmt.Sprintf("http://%s:%d/%v/_search?scroll=10m", ip, port, index), "application/json", bytes.NewBuffer(postData))
-	check(err)
-	_ = os.Mkdir(fmt.Sprintf("./%v/", ip), 0755)
-	f, err := os.Create(fmt.Sprintf("./%v/ESDUMP-%v-%v-%v.json", ip, ip, index, time.Now().Format(time.RFC3339)))
-	check(err)
-	defer f.Close()
-	defer resp.Body.Close()
-	resBytes, _ := ioutil.ReadAll(resp.Body)
-	Hits := gjson.GetBytes(resBytes, "hits.hits")
-	if !(Hits.Raw == "" || Hits.Raw == "[]") {
-		f.Write([]byte(Hits.Raw))
+	
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("http://%s:%d/%s/_search?scroll=10m", cfg.TargetIP, cfg.TargetPort, index),
+		bytes.NewBuffer(postData))
+	if err != nil {
+		done <- fmt.Errorf("failed to create request for index %s: %w", index, err)
+		return
 	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		done <- fmt.Errorf("failed to query index %s: %w", index, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Create output directory
+	outputDir := fmt.Sprintf("./%s/", cfg.TargetIP)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		done <- fmt.Errorf("failed to create output directory: %w", err)
+		return
+	}
+
+	filename := fmt.Sprintf("%sESDUMP-%s-%s-%s.json", outputDir, cfg.TargetIP, index, time.Now().Format(time.RFC3339))
+	f, err := os.Create(filename)
+	if err != nil {
+		done <- fmt.Errorf("failed to create output file: %w", err)
+		return
+	}
+	defer f.Close()
+
+	resBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		done <- fmt.Errorf("failed to read response body: %w", err)
+		return
+	}
+
+	hits := gjson.GetBytes(resBytes, "hits.hits")
+	if hits.Raw != "" && hits.Raw != "[]" {
+		if _, err := f.Write([]byte(hits.Raw)); err != nil {
+			done <- fmt.Errorf("failed to write initial hits: %w", err)
+			return
+		}
+	}
+
 	nextScroll := gjson.GetBytes(resBytes, "_scroll_id")
 	if nextScroll.Exists() {
-		_ = getNextScroll(ip, port, nextScroll.String(), f)
-
+		if err := getNextScroll(ctx, client, cfg.TargetIP, cfg.TargetPort, nextScroll.String(), f); err != nil {
+			done <- fmt.Errorf("failed during scroll: %w", err)
+			return
+		}
 	}
-	return true
+
+	log.Info("Successfully dumped index", slog.String("file", filename))
+	done <- nil
 }
 
-func getIndexList(ip string, port uint, minDocCount uint, minIndexSizeKB uint, indexRe *regexp.Regexp) []string {
+// getIndexList retrieves the list of indices that match the configured criteria.
+func getIndexList(ctx context.Context, client *http.Client, cfg *Config) ([]string, error) {
+	var result []string
 
-	var resList []string
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://%s:%d/_cat/indices?format=json&bytes=kb", cfg.TargetIP, cfg.TargetPort),
+		nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/_cat/indices?format=json&bytes=kb", ip, port))
-	check(err)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get index list: %w", err)
+	}
 	defer resp.Body.Close()
-	bytes, _ := ioutil.ReadAll(resp.Body)
-	result := gjson.Parse(string(bytes))
-	result.ForEach(func(key, value gjson.Result) bool {
 
-		docCountInt, _ := strconv.Atoi(gjson.Get(value.String(), "docs\\.count").String())
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	indices := gjson.ParseBytes(body)
+	indices.ForEach(func(key, value gjson.Result) bool {
+		docCount, _ := strconv.Atoi(gjson.Get(value.String(), "docs\\.count").String())
 		indexSizeKB, _ := strconv.Atoi(gjson.Get(value.String(), "store\\.size").String())
-		if uint(docCountInt) >= minDocCount && uint(indexSizeKB) >= minIndexSizeKB {
-			indexName := gjson.Get(value.String(), "index").String()
-			// Checking index regex match
-			if indexRe.Match([]byte(indexName)) {
-				resList = append(resList, indexName)
+		indexName := gjson.Get(value.String(), "index").String()
+
+		log := logger.With(
+			slog.String("index", indexName),
+			slog.Int("docs", docCount),
+			slog.Int("size_kb", indexSizeKB),
+		)
+
+		if uint(docCount) >= cfg.MinDocCount && uint(indexSizeKB) >= cfg.MinIndexSizeKB {
+			if cfg.IndexRegex.MatchString(indexName) {
+				result = append(result, indexName)
+				log.Info("Index matched criteria")
 			} else {
-				log.Warnf("Index %s name did NOT match regex, skipping..", indexName)
+				log.Info("Index did not match regex pattern, skipping")
 			}
 		} else {
-			log.Warnf("Index %s name did NOT meet document count and size requirements, skipping..", gjson.Get(value.String(), "index").String())
+			log.Info("Index did not meet size/document requirements, skipping")
 		}
 		return true
 	})
-	return resList
+
+	return result, nil
 }
 
 func main() {
-	log.Info("Starting ...")
-	checkFlags()
-	indexRe := regexp.MustCompile(*indexRegex)
-	log.Infof("Getting index list from %s", *targetIP)
-	indexList := getIndexList(*targetIP, *targetPort, *minDocCount, *minIndexSizeKB, indexRe)
-	done := make(chan bool)
-	for _, index := range indexList {
-		log.Infof("Getting index %s from %s", index, *targetIP)
-		go indexToJSON(*targetIP, *targetPort, index, done)
+	logger.Info("ElasticDump starting...")
+
+	cfg, err := parseFlags()
+	if err != nil {
+		logger.Error("Configuration error", slog.String("error", err.Error()))
+		flag.Usage()
+		os.Exit(1)
 	}
-	// wait for everything to finish
-	errors := 0
+
+	ctx := context.Background()
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	logger.Info("Fetching index list",
+		slog.String("target", cfg.TargetIP),
+		slog.Uint64("port", uint64(cfg.TargetPort)))
+
+	indexList, err := getIndexList(ctx, client, cfg)
+	if err != nil {
+		logger.Error("Failed to get index list", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	if len(indexList) == 0 {
+		logger.Warn("No indices matched the specified criteria")
+		os.Exit(0)
+	}
+
+	logger.Info("Starting index dump",
+		slog.Int("count", len(indexList)),
+		slog.Any("indices", indexList))
+
+	done := make(chan error, len(indexList))
+	for _, index := range indexList {
+		go dumpIndexToJSON(ctx, client, cfg, index, done)
+	}
+
+	// Wait for all dumps to complete
+	errorCount := 0
 	for i := 0; i < len(indexList); i++ {
-		if !<-done {
-			log.Errorf("Error while doing index %s", indexList[i])
-			errors++
+		if err := <-done; err != nil {
+			logger.Error("Index dump failed",
+				slog.String("index", indexList[i]),
+				slog.String("error", err.Error()))
+			errorCount++
 		}
 	}
+
+	if errorCount > 0 {
+		logger.Error("Some dumps failed",
+			slog.Int("failed", errorCount),
+			slog.Int("total", len(indexList)))
+		os.Exit(1)
+	}
+
+	logger.Info("ElasticDump completed successfully",
+		slog.Int("indices_dumped", len(indexList)))
 }

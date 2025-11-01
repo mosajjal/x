@@ -1,6 +1,6 @@
 module github.com/mosajjal/go-exp/sshproxy
 
-go 1.22
+go 1.25
 
 require (
 	github.com/gliderlabs/ssh v0.3.7

@@ -1,0 +1,172 @@
+name: Test and Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Go Projects
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.25.x']
+        project:
+          - allhash
+          - containerize
+          - cyberchef-standalone
+          - elasticdump
+          - fakedns
+          - fossflow-standalone
+          - gopherchain
+          - grizz
+          - identme
+          - mhs
+          - oauth2
+          - pcap-freshner
+          - pebble-cli
+          - proxyenv
+          - redlineparser
+          - sctptunnel
+          - siemsend
+          - sniplex
+          - sockstls
+          - spitcurl
+          - sshproxy
+          - webhookio
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: false
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.project }}-${{ hashFiles(format('{0}/go.sum', matrix.project)) }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.project }}-
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      working-directory: ./${{ matrix.project }}
+      run: |
+        if [ -f go.mod ]; then
+          go mod download
+          go mod verify
+        fi
+
+    - name: Run tests
+      working-directory: ./${{ matrix.project }}
+      run: |
+        if [ -f go.mod ]; then
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+        fi
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      if: success()
+      with:
+        file: ./${{ matrix.project }}/coverage.txt
+        flags: ${{ matrix.project }}
+        fail_ci_if_error: false
+
+  lint:
+    name: Lint Go Projects
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project:
+          - allhash
+          - containerize
+          - cyberchef-standalone
+          - elasticdump
+          - fakedns
+          - fossflow-standalone
+          - gopherchain
+          - grizz
+          - identme
+          - mhs
+          - oauth2
+          - pcap-freshner
+          - pebble-cli
+          - proxyenv
+          - redlineparser
+          - sctptunnel
+          - siemsend
+          - sniplex
+          - sockstls
+          - spitcurl
+          - sshproxy
+          - webhookio
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.x'
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        working-directory: ${{ matrix.project }}
+        args: --timeout=5m
+
+  build:
+    name: Build Go Projects
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project:
+          - allhash
+          - containerize
+          - cyberchef-standalone
+          - elasticdump
+          - fakedns
+          - fossflow-standalone
+          - gopherchain
+          - grizz
+          - identme
+          - mhs
+          - oauth2
+          - pcap-freshner
+          - pebble-cli
+          - proxyenv
+          - redlineparser
+          - sctptunnel
+          - siemsend
+          - sniplex
+          - sockstls
+          - spitcurl
+          - sshproxy
+          - webhookio
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.x'
+
+    - name: Build
+      working-directory: ./${{ matrix.project }}
+      run: |
+        if [ -f go.mod ]; then
+          go build -v -ldflags="-s -w" -trimpath ./...
+        fi

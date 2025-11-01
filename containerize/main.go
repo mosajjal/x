@@ -19,23 +19,23 @@ import (
 
 // DockerImageManifest represents the structure of a Docker image manifest.
 type DockerImageManifest struct {
-	Config   string            `json:"Config"`
-	RepoTags []string          `json:"RepoTags"`
-	Layers   []string          `json:"Layers"`
+	Config   string   `json:"Config"`
+	RepoTags []string `json:"RepoTags"`
+	Layers   []string `json:"Layers"`
 }
 
 // DockerConfig represents the Docker image configuration.
 type DockerConfig struct {
-	Architecture string            `json:"architecture"`
-	OS           string            `json:"os"`
-	Created      string            `json:"created"`
-	Config       ContainerConfig   `json:"config"`
-	RootFS       RootFS            `json:"rootfs"`
+	Architecture string          `json:"architecture"`
+	OS           string          `json:"os"`
+	Created      string          `json:"created"`
+	Config       ContainerConfig `json:"config"`
+	RootFS       RootFS          `json:"rootfs"`
 }
 
 // ContainerConfig holds container configuration.
 type ContainerConfig struct {
-	Entrypoint []string          `json:"Entrypoint"`
+	Entrypoint []string `json:"Entrypoint"`
 }
 
 // RootFS describes the root filesystem.
@@ -177,13 +177,13 @@ func createLayerTarball(sourceDir, targetTarGz string) (string, string, int64) {
 		if err != nil {
 			return err
 		}
-		
+
 		// Calculate the relative path correctly
 		relPath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
 			return err
 		}
-		
+
 		// For Docker, we need to use "./" prefix for the root directory entries
 		if relPath == "." {
 			header.Name = "./"
@@ -208,7 +208,7 @@ func createLayerTarball(sourceDir, targetTarGz string) (string, string, int64) {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
 		log.Fatalf("Failed to create layer tarball: %v", err)
 	}
@@ -232,13 +232,13 @@ func createLayerTarball(sourceDir, targetTarGz string) (string, string, int64) {
 		log.Fatalf("Failed to open layer tarball: %v", err)
 	}
 	defer gzFile.Close()
-	
+
 	gzReader, err := gzip.NewReader(gzFile)
 	if err != nil {
 		log.Fatalf("Failed to create gzip reader: %v", err)
 	}
 	defer gzReader.Close()
-	
+
 	uncompressedBytes, err := io.ReadAll(gzReader)
 	if err != nil {
 		log.Fatalf("Failed to read uncompressed layer: %v", err)
@@ -255,20 +255,20 @@ func createDockerTarball(sourceDir, targetTar string, filesToInclude []string) e
 		return fmt.Errorf("failed to create final tarball: %v", err)
 	}
 	defer outFile.Close()
-	
+
 	tarWriter := tar.NewWriter(outFile)
 	defer tarWriter.Close()
 
 	// Add each specified file to the tar
 	for _, fileName := range filesToInclude {
 		filePath := filepath.Join(sourceDir, fileName)
-		
+
 		// Get file info
 		info, err := os.Stat(filePath)
 		if err != nil {
 			return fmt.Errorf("failed to stat file %s: %v", filePath, err)
 		}
-		
+
 		// Create header
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
@@ -288,14 +288,14 @@ func createDockerTarball(sourceDir, targetTar string, filesToInclude []string) e
 				return fmt.Errorf("failed to open file %s: %v", filePath, err)
 			}
 			defer file.Close()
-			
+
 			_, err = io.Copy(tarWriter, file)
 			if err != nil {
 				return fmt.Errorf("failed to copy file %s: %v", filePath, err)
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -324,7 +324,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to copy file from %s to %s: %v", src, dst, err)
 	}
-	
+
 	return nil
 }
 
@@ -362,6 +362,6 @@ func detectArchitecture(binaryPath string) (string, error) {
 			return "riscv64", nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("unsupported architecture: %s", f.Machine.String())
 }

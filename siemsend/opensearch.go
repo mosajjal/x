@@ -14,8 +14,8 @@ import (
 	"github.com/opensearch-project/opensearch-go"
 	"github.com/opensearch-project/opensearch-go/opensearchapi"
 
-	slog "log/slog"
 	"github.com/spf13/cobra"
+	slog "log/slog"
 )
 
 type Opensearch struct {

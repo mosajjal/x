@@ -46,9 +46,9 @@ const (
 
 // TreeValue is inserted into TSTs as value for each prefix, suffix and FQDN.
 type TreeValue struct {
-	Entry string  // The original domain pattern
-	Mode  uint8   // Match type (prefix, suffix, or FQDN)
-	IP    net.IP  // IP address to return for this pattern
+	Entry string // The original domain pattern
+	Mode  uint8  // Match type (prefix, suffix, or FQDN)
+	IP    net.IP // IP address to return for this pattern
 }
 
 func init() {

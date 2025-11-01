@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	slog "log/slog"
 	"github.com/spf13/cobra"
+	slog "log/slog"
 )
 
 func (s Sentinel) Init() error {

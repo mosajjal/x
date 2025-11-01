@@ -72,9 +72,9 @@ func parseFlags() (*Config, error) {
 // getNextScroll fetches the next batch of documents using scroll API.
 func getNextScroll(ctx context.Context, client *http.Client, ip string, port uint, scrollID string, f *os.File) error {
 	postData := []byte(fmt.Sprintf(`{"scroll_id": "%s", "scroll": "10m"}`, scrollID))
-	
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, 
-		fmt.Sprintf("http://%s:%d/_search/scroll", ip, port), 
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("http://%s:%d/_search/scroll", ip, port),
 		bytes.NewBuffer(postData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -123,7 +123,7 @@ func dumpIndexToJSON(ctx context.Context, client *http.Client, cfg *Config, inde
 	)
 
 	postData := []byte(`{"size": 1000}`)
-	
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("http://%s:%d/%s/_search?scroll=10m", cfg.TargetIP, cfg.TargetPort, index),
 		bytes.NewBuffer(postData))
